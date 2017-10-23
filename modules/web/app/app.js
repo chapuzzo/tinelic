@@ -1,10 +1,10 @@
-define(['views/layout/layout','module','safe',"dust",
-	"tinybone/base",
+define(["require","tinybone/base",'views/layout/layout','module','safe',"dust.core",
 	"moment/moment",
 	"lodash",
+	"tson",
 	"tinybone/backadapter",
 	"jquery.blockUI"
-],function (Layout,module,safe,dust,tb,moment,_) {
+],function (require,tb,Layout,module,safe,dust,moment,_,tson) {
 	// Make sure dust.helpers is an object before adding a new helper.
 	if (!dust.helpers)
 		dust.helpers = {};
@@ -95,7 +95,7 @@ define(['views/layout/layout','module','safe',"dust",
 			var self = this;
 			var router = self.router;
 			var routes = ["routes/main"];
-			requirejs(routes, function (main) {
+			require(routes, function (main) {
 				// some standard locals grabber
 				router.use(function (req,res, next) {
 					res.locals.token = req.cookies.token || "public";
@@ -150,7 +150,7 @@ define(['views/layout/layout','module','safe',"dust",
 				router.use(function (err, req, res, cb) {
 					if (err.subject) {
 						if (err.subject == "Unauthorized") {
-							requirejs(["views/signup/signup"], safe.trap(cb, function (view) {
+							require(["views/signup/signup"], safe.trap(cb, function (view) {
 								res.status(401);
 								res.renderX({view: view, route: req.route.path, data: {title: "Sign UP"}});
 							}), cb);
@@ -170,6 +170,8 @@ define(['views/layout/layout','module','safe',"dust",
 			},cb);
 		},
 		init:function(wire, cb) {
+			wire = tson.decode(wire);
+
 			if (!cb)
 				cb = this.clientHardError;
 
@@ -200,14 +202,14 @@ define(['views/layout/layout','module','safe',"dust",
 				res.redirect = function (path,cb) {
 					var req = this.req;
 					cb = cb || function (err) {
-						req.next(err);
+						req._t_done(err);
 					};
 					self.router.navigateTo(path,{replace:true},cb);
 				};
 				res.renderX = function (route, cb) {
 					var req = this.req;
 					cb = cb || function (err) {
-						req.next(err);
+						req._t_done(err);
 					};
 					self.clientRender(this,route,cb);
 				};
@@ -241,25 +243,30 @@ define(['views/layout/layout','module','safe',"dust",
 			// tickmark for data ready time
 			this._pageLoad.data = new Date();
 
-			// create new view, bind data to it and bind to main view
+			// create new view, bind data to it
 			var mainView = this.mainView;
 			var view = new route.view({app:self});
 			view.data = route.data;
 			view.locals = res.locals;
-			mainView.attachSubView(view);
 
 			// render
 			view.render(safe.sure(cb, function (text) {
 				// render dom nodes and bind view
-				var oldView = mainView.views.length==1?mainView.views[0]:undefined;
+				var exViews = _.filter(mainView.views, function (v) { return v.cid!=view.cid; });
+				var oldView = exViews.length==1?exViews[0]:undefined;
 				var $dom = $(text);
 				mainView.$el.append($dom);
 				view.bindDom($dom, oldView);
+
 				// remove all root views except new one and hard error (if any)
 				$(".hard-client-error").remove();
-				_.each(_.filter(mainView.views, function (v) { return v.cid!=view.cid; }), function (v) {
+				_.each(exViews, function (v) {
 					v.remove();
 				});
+
+				mainView.attachSubView(view);
+
+
 				// view is actually ready, finalizing
 				document.title = route.data.title;
 				$.unblockUI();

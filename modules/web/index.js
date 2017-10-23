@@ -15,12 +15,16 @@ module.exports.init = function (ctx, cb) {
 	var self_id = null;
 	var cfg = ctx.cfg;
 
-	requirejs.config({
+	var reqctx = requirejs.config({
 		baseUrl: __dirname+"/app",
 		paths:{
 			"tson":path.resolve(__dirname,"../tinyback/tson"),
 			"prefixify":path.resolve(__dirname,"../tinyback/prefixify"),
 			"tinybone":path.resolve(__dirname,"../tinybone"),
+			'dust.core': path.resolve(__dirname, '../../node_modules/dustjs-linkedin/lib/dust'),
+			'dust.parse': path.resolve(__dirname, '../../node_modules/dustjs-linkedin/lib/parser'),
+			'dust.compile': path.resolve(__dirname, '../../node_modules/dustjs-linkedin/lib/compiler'),
+			'dust-helpers': path.resolve(__dirname, '../../node_modules/dustjs-helpers/lib/dust-helpers'),
 			'dustc': path.resolve(__dirname,'../tinybone/dustc'),
 			'text': path.resolve(__dirname,'../../node_modules/requirejs-text/text'),
 			"md5":"../public/js/md5",
@@ -31,6 +35,9 @@ module.exports.init = function (ctx, cb) {
 				env:"node"
 			},
 			"tinybone/base":{
+				debug:cfg.env!="production"
+			},
+			"dustc":{
 				debug:cfg.env!="production"
 			},
 			"tinybone/backadapter":{
@@ -44,10 +51,8 @@ module.exports.init = function (ctx, cb) {
 		console.log(err.trace);
 	};
 
-	requirejs.define("dust",dust);
-	requirejs.define("dust-helpers", require('dustjs-helpers'));
-
 	// server stubs
+    requirejs.define.amd.dust = true;
 	requirejs.define("jquery", true);
 	requirejs.define("jquery-cookie", true);
 	requirejs.define("jquery.blockUI", true);
@@ -72,7 +77,7 @@ module.exports.init = function (ctx, cb) {
 				res.send(404);
 		}));
 	});
-	requirejs(['app'], function (App) {
+	reqctx(['app'], function (App) {
 		var app = new App({prefix:"/web"});
 		// reuse express router as is
 		app.router = ctx.router;
@@ -105,7 +110,7 @@ module.exports.init = function (ctx, cb) {
 					wv.prefix = app.prefix;
 
 					// make wire available for download for 30s
-					ctx.api.cache.set("web_wires",uniqueId,wv, safe.sure(cb, function () {
+					ctx.api.cache.set("web_wires",uniqueId,ctx.api.tson.encode(wv), safe.sure(cb, function () {
 						res.send(text);
 					}));
 				}));
@@ -169,7 +174,7 @@ module.exports.init = function (ctx, cb) {
 					if (ctx.locals.newrelic)
 						ctx.locals.newrelic.setTransactionName("/webapi/"+(token=="public"?"public":"token")+"/feed/"+p.feed);
 					feed = p.feed.split(".");
-					requirejs(["feed/"+feed[0]], function (m) {
+					reqctx(["feed/"+feed[0]], function (m) {
 						m[feed[1]](token,p.params,cb);
 					},cb);
 				}
